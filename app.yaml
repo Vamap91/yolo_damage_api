@@ -1,0 +1,53 @@
+runtime: python311
+
+# Configurações básicas
+service: default
+instance_class: F4_1G
+
+# Configurações de escalonamento automático
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.6
+
+# Variáveis de ambiente
+env_variables:
+  FLASK_ENV: production
+  PYTHONPATH: /srv
+
+# Configurações de recursos
+resources:
+  cpu: 1
+  memory_gb: 4
+  disk_size_gb: 10
+
+# Configurações de timeout
+entrypoint: gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 src.main:app
+
+# Handlers para arquivos estáticos
+handlers:
+- url: /static
+  static_dir: src/static
+  secure: always
+
+- url: /.*
+  script: auto
+  secure: always
+
+# Configurações de saúde
+readiness_check:
+  path: "/api/damage/health"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
+
+liveness_check:
+  path: "/api/damage/health"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  initial_delay_sec: 300
