@@ -7,13 +7,18 @@ import cv2
 from datetime import datetime
 import json
 
-# Configurar OpenCV para modo headless
 os.environ['OPENCV_HEADLESS'] = '1'
+os.environ['DISPLAY'] = ''
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
 class YOLODamageService:
     """Serviço para detecção de danos veiculares usando YOLOv8"""
     
     def __init__(self):
+        # Configurar ambiente headless no início da inicialização
+        os.environ.setdefault('OPENCV_HEADLESS', '1')
+        os.environ.setdefault('DISPLAY', '')
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
         self.model = None
         self.model_path = "car_damage_best.pt"
         self.damage_config = {
