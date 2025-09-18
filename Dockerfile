@@ -1,39 +1,52 @@
-# Dockerfile para deploy da API YOLO
+# Dockerfile alternativo - versão mais compatível
 FROM python:3.11-slim
 
 # Define o diretório de trabalho
 WORKDIR /app
 
-# Instala dependências do sistema
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+# Instala dependências básicas primeiro
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tenta instalar OpenCV dependencies - versão mais compatível
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
+    libgthread-2.0-0 \
+    || echo "Alguns pacotes podem não estar disponíveis, continuando..."
 
-# Copia os arquivos de requirements primeiro (para cache do Docker)
+# Instala OpenGL dependencies - tenta múltiplas opções
+RUN apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    || apt-get install -y --no-install-recommends libgl1 \
+    || echo "OpenGL libs not available, using headless mode"
+
+# Limpa cache do apt
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Copia requirements e instala dependências Python
 COPY requirements.txt .
 
-# Instala as dependências Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Instala dependências Python com timeout maior
+RUN pip install --no-cache-dir --timeout=1000 -r requirements.txt
 
-# Copia o código da aplicação
+# Copia código da aplicação
 COPY src/ ./src/
-COPY app.yaml .
-
-# Cria diretório para o modelo
-RUN mkdir -p /app/models
 
 # Define variáveis de ambiente
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
+ENV PORT=8080
+ENV OPENCV_HEADLESS=1
 
 # Expõe a porta
 EXPOSE 8080
 
-# Define o comando de inicialização
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "0", "src.main:app"]
+# Comando de inicialização
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 --preload src.main:app
