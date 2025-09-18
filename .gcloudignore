@@ -1,0 +1,51 @@
+# Arquivos e diretórios a serem ignorados no deploy para Google Cloud
+
+# Ambiente virtual
+venv/
+env/
+.env
+
+# Arquivos Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Arquivos de desenvolvimento
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+
+# Arquivos de teste
+test_*.py
+*_test.py
+tests/
+
+# Documentação
+README.md
+docs/
+
+# Arquivos temporários
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Arquivos de configuração local
+.env.local
+config.local.py
+
+# Cache do pip
+.pip-cache/
+
+# Arquivos de backup
+*.bak
+*.backup
+
+# Arquivos grandes desnecessários
+*.zip
+*.tar.gz
+*.rar
