@@ -2,7 +2,6 @@ import os
 import numpy as np
 from PIL import Image
 import requests
-from ultralytics import YOLO
 import cv2
 from datetime import datetime
 import json
@@ -14,10 +13,6 @@ os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 class YOLODamageService:
     
     def __init__(self):
-        os.environ.setdefault('OPENCV_HEADLESS', '1')
-        os.environ.setdefault('DISPLAY', '')
-        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-        
         self.model = None
         self.model_path = "car_damage_best.pt"
         self.damage_config = {
@@ -84,9 +79,7 @@ class YOLODamageService:
             if not self._download_model():
                 raise Exception("Falha ao baixar o modelo")
             
-            import ultralytics
-            ultralytics.settings.update({'datasets_dir': '/tmp'})
-            
+            from ultralytics import YOLO
             self.model = YOLO(self.model_path)
             print("Modelo YOLO carregado com sucesso!")
             
@@ -103,16 +96,7 @@ class YOLODamageService:
         else:
             img_array = image_data
         
-        try:
-            results = self.model.predict(
-                img_array, 
-                show=False,
-                save=False,
-                verbose=False
-            )
-        except Exception as e:
-            print(f"Erro na predição YOLO: {e}")
-            results = self.model(img_array)
+        results = self.model(img_array)
         
         detections = []
         if len(results[0].boxes) > 0:
@@ -126,23 +110,14 @@ class YOLODamageService:
                 }
                 detections.append(detection)
         
-        try:
-            annotated_img = results[0].plot(show=False, save=False)
-        except Exception as e:
-            print(f"Warning: YOLO plot failed: {e}")
-            annotated_img = img_array.copy()
+        annotated_img = results[0].plot()
         
         try:
-            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
-                annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+            annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
         except Exception as e:
             print(f"Warning: OpenCV color conversion failed: {e}")
-            try:
-                if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
-                    annotated_img = annotated_img[:, :, ::-1]
-            except Exception as e2:
-                print(f"Warning: Manual color conversion also failed: {e2}")
-                annotated_img = img_array
+            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
+                annotated_img = annotated_img[:, :, ::-1]
         
         damage_analysis = self._create_damage_analysis(detections)
         
