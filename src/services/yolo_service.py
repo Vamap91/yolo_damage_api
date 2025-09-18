@@ -12,13 +12,12 @@ os.environ['DISPLAY'] = ''
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
 class YOLODamageService:
-    """Serviço para detecção de danos veiculares usando YOLOv8"""
     
     def __init__(self):
-        # Configurar ambiente headless no início da inicialização
         os.environ.setdefault('OPENCV_HEADLESS', '1')
         os.environ.setdefault('DISPLAY', '')
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        
         self.model = None
         self.model_path = "car_damage_best.pt"
         self.damage_config = {
@@ -58,7 +57,6 @@ class YOLODamageService:
         self._load_model()
     
     def _download_model(self):
-        """Baixa o modelo do GitHub Releases se não existir localmente"""
         if os.path.exists(self.model_path):
             return True
             
@@ -82,11 +80,13 @@ class YOLODamageService:
             return False
     
     def _load_model(self):
-        """Carrega o modelo YOLOv8"""
         try:
             if not self._download_model():
                 raise Exception("Falha ao baixar o modelo")
-                
+            
+            import ultralytics
+            ultralytics.settings.update({'datasets_dir': '/tmp'})
+            
             self.model = YOLO(self.model_path)
             print("Modelo YOLO carregado com sucesso!")
             
@@ -95,28 +95,25 @@ class YOLODamageService:
             self.model = None
     
     def process_image(self, image_data):
-        """
-        Processa uma imagem e detecta danos
-        
-        Args:
-            image_data: Dados da imagem (PIL Image ou array numpy)
-            
-        Returns:
-            dict: Resultado da análise com detecções e imagem anotada
-        """
         if self.model is None:
             raise Exception("Modelo não carregado")
         
-        # Converte para array numpy se necessário
         if isinstance(image_data, Image.Image):
             img_array = np.array(image_data)
         else:
             img_array = image_data
         
-        # Executa a detecção
-        results = self.model(img_array)
+        try:
+            results = self.model.predict(
+                img_array, 
+                show=False,
+                save=False,
+                verbose=False
+            )
+        except Exception as e:
+            print(f"Erro na predição YOLO: {e}")
+            results = self.model(img_array)
         
-        # Processa as detecções
         detections = []
         if len(results[0].boxes) > 0:
             for box in results[0].boxes:
@@ -129,19 +126,24 @@ class YOLODamageService:
                 }
                 detections.append(detection)
         
-        # Gera imagem anotada
-        annotated_img = results[0].plot()
-        
-        # Conversão de cores com fallback para ambiente headless
         try:
-            annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+            annotated_img = results[0].plot(show=False, save=False)
+        except Exception as e:
+            print(f"Warning: YOLO plot failed: {e}")
+            annotated_img = img_array.copy()
+        
+        try:
+            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
+                annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
         except Exception as e:
             print(f"Warning: OpenCV color conversion failed: {e}")
-            # Fallback: conversão manual BGR para RGB
-            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
-                annotated_img = annotated_img[:, :, ::-1]  # BGR to RGB
+            try:
+                if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
+                    annotated_img = annotated_img[:, :, ::-1]
+            except Exception as e2:
+                print(f"Warning: Manual color conversion also failed: {e2}")
+                annotated_img = img_array
         
-        # Cria análise detalhada
         damage_analysis = self._create_damage_analysis(detections)
         
         return {
@@ -152,7 +154,6 @@ class YOLODamageService:
         }
     
     def _create_damage_analysis(self, detections):
-        """Cria análise detalhada dos danos detectados"""
         damage_report = []
         
         for i, detection in enumerate(detections):
@@ -161,7 +162,6 @@ class YOLODamageService:
             location = self.damage_config['location_map'].get(class_name, 'N/A')
             cost_range = self.damage_config['cost_estimates'].get(class_name, (100, 500))
             
-            # Estima custo baseado na confiança
             confidence = detection['confidence']
             min_cost, max_cost = cost_range
             estimated_cost = min_cost + (max_cost - min_cost) * confidence
@@ -180,7 +180,6 @@ class YOLODamageService:
         return damage_report
     
     def _create_summary(self, damage_analysis):
-        """Cria resumo da análise"""
         if not damage_analysis:
             return {
                 'total_damages': 0,
@@ -204,7 +203,6 @@ class YOLODamageService:
             
             total_cost += damage['estimated_cost']
         
-        # Determina urgência
         urgency = 'Baixa'
         if severity_count['Severo'] > 0:
             urgency = 'Alta'
@@ -220,7 +218,6 @@ class YOLODamageService:
         }
     
     def create_full_report(self, damage_analysis, vehicle_info=None):
-        """Gera relatório completo em formato JSON"""
         summary = self._create_summary(damage_analysis)
         
         report = {
