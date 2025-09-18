@@ -2,13 +2,19 @@ import os
 import numpy as np
 from PIL import Image
 import requests
-import cv2
 from datetime import datetime
 import json
 
 os.environ['OPENCV_HEADLESS'] = '1'
 os.environ['DISPLAY'] = ''
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
+try:
+    import cv2
+    OPENCV_AVAILABLE = True
+except ImportError:
+    OPENCV_AVAILABLE = False
+    print("OpenCV não disponível, usando conversão alternativa")
 
 class YOLODamageService:
     
@@ -59,7 +65,7 @@ class YOLODamageService:
         
         try:
             print("Baixando modelo YOLO...")
-            response = requests.get(model_url, stream=True)
+            response = requests.get(model_url, stream=True, timeout=30)
             response.raise_for_status()
             
             with open(self.model_path, 'wb') as f:
@@ -87,6 +93,17 @@ class YOLODamageService:
             print(f"Erro ao carregar o modelo: {e}")
             self.model = None
     
+    def _convert_bgr_to_rgb(self, image):
+        if OPENCV_AVAILABLE:
+            try:
+                return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            except Exception as e:
+                print(f"OpenCV conversion failed: {e}")
+        
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            return image[:, :, ::-1]
+        return image
+    
     def process_image(self, image_data):
         if self.model is None:
             raise Exception("Modelo não carregado")
@@ -110,14 +127,12 @@ class YOLODamageService:
                 }
                 detections.append(detection)
         
-        annotated_img = results[0].plot()
-        
         try:
-            annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+            annotated_img = results[0].plot()
+            annotated_img = self._convert_bgr_to_rgb(annotated_img)
         except Exception as e:
-            print(f"Warning: OpenCV color conversion failed: {e}")
-            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
-                annotated_img = annotated_img[:, :, ::-1]
+            print(f"Error generating annotated image: {e}")
+            annotated_img = img_array
         
         damage_analysis = self._create_damage_analysis(detections)
         
