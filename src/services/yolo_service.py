@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import requests
 from datetime import datetime
 import json
@@ -8,13 +8,6 @@ import json
 os.environ['OPENCV_HEADLESS'] = '1'
 os.environ['DISPLAY'] = ''
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-
-try:
-    import cv2
-    OPENCV_AVAILABLE = True
-except ImportError:
-    OPENCV_AVAILABLE = False
-    print("OpenCV não disponível, usando conversão alternativa")
 
 class YOLODamageService:
     
@@ -53,6 +46,14 @@ class YOLODamageService:
                 'dent': (400, 1500),
                 'scratch': (150, 800),
                 'crack': (200, 1000)
+            },
+            'colors': {
+                'shattered_glass': (255, 0, 0),
+                'broken_lamp': (255, 165, 0),
+                'flat_tire': (255, 255, 0),
+                'dent': (0, 255, 0),
+                'scratch': (0, 0, 255),
+                'crack': (128, 0, 128)
             }
         }
         self._load_model()
@@ -65,7 +66,7 @@ class YOLODamageService:
         
         try:
             print("Baixando modelo YOLO...")
-            response = requests.get(model_url, stream=True, timeout=30)
+            response = requests.get(model_url, stream=True, timeout=60)
             response.raise_for_status()
             
             with open(self.model_path, 'wb') as f:
@@ -93,16 +94,41 @@ class YOLODamageService:
             print(f"Erro ao carregar o modelo: {e}")
             self.model = None
     
-    def _convert_bgr_to_rgb(self, image):
-        if OPENCV_AVAILABLE:
-            try:
-                return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            except Exception as e:
-                print(f"OpenCV conversion failed: {e}")
+    def _draw_annotations_pil(self, image_array, detections):
+        """Desenha anotações usando PIL ao invés do OpenCV"""
+        if isinstance(image_array, np.ndarray):
+            img = Image.fromarray(image_array.astype('uint8'))
+        else:
+            img = image_array
         
-        if len(image.shape) == 3 and image.shape[2] == 3:
-            return image[:, :, ::-1]
-        return image
+        draw = ImageDraw.Draw(img)
+        
+        try:
+            font = ImageFont.load_default()
+        except:
+            font = None
+        
+        for detection in detections:
+            bbox = detection['bbox']
+            class_name = detection['class']
+            confidence = detection['confidence']
+            
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            
+            color = self.damage_config['colors'].get(class_name, (255, 0, 0))
+            
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+            
+            label = f"{self.damage_config['class_names'].get(class_name, class_name)}: {confidence:.2f}"
+            
+            if font:
+                bbox_font = draw.textbbox((x1, y1-20), label, font=font)
+                draw.rectangle([bbox_font[0], bbox_font[1], bbox_font[2], bbox_font[3]], fill=color)
+                draw.text((x1, y1-20), label, fill=(255, 255, 255), font=font)
+            else:
+                draw.text((x1, y1-15), label, fill=color)
+        
+        return np.array(img)
     
     def process_image(self, image_data):
         if self.model is None:
@@ -128,8 +154,7 @@ class YOLODamageService:
                 detections.append(detection)
         
         try:
-            annotated_img = results[0].plot()
-            annotated_img = self._convert_bgr_to_rgb(annotated_img)
+            annotated_img = self._draw_annotations_pil(img_array, detections)
         except Exception as e:
             print(f"Error generating annotated image: {e}")
             annotated_img = img_array
