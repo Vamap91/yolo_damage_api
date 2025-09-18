@@ -7,6 +7,9 @@ import cv2
 from datetime import datetime
 import json
 
+# Configurar OpenCV para modo headless
+os.environ['OPENCV_HEADLESS'] = '1'
+
 class YOLODamageService:
     """Serviço para detecção de danos veiculares usando YOLOv8"""
     
@@ -123,7 +126,15 @@ class YOLODamageService:
         
         # Gera imagem anotada
         annotated_img = results[0].plot()
-        annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+        
+        # Conversão de cores com fallback para ambiente headless
+        try:
+            annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
+        except Exception as e:
+            print(f"Warning: OpenCV color conversion failed: {e}")
+            # Fallback: conversão manual BGR para RGB
+            if len(annotated_img.shape) == 3 and annotated_img.shape[2] == 3:
+                annotated_img = annotated_img[:, :, ::-1]  # BGR to RGB
         
         # Cria análise detalhada
         damage_analysis = self._create_damage_analysis(detections)
