@@ -1,0 +1,45 @@
+venv/
+env/
+.env
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Arquivos temporários
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Documentação
+README.md
+docs/
+
+# Scripts de desenvolvimento
+deploy.sh
+
+# Arquivos de teste
+test_*.py
+*_test.py
+tests/
+
+# Arquivos de backup
+*.bak
+*.backup
